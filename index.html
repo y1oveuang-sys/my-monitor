@@ -2,125 +2,42 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>System Monitor</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
-        :root {
-            --primary: #4f46e5;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --dark: #0f172a;
-            --bg: #f8fafc;
-            --card-bg: #ffffff;
-            --text-main: #334155;
-            --text-light: #64748b;
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, sans-serif; }
-
-        body {
-            background-color: var(--bg);
-            color: var(--text-main);
-            display: flex;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        /* 接收者全屏模式逻辑 */
-        body.viewer-mode .header, 
-        body.viewer-mode .instance-grid { 
-            display: none !important; 
-        }
-        body.viewer-mode .content { padding: 0; }
-        body.viewer-mode .terminal-wrapper { 
-            flex: 1; 
-            height: 100vh; 
-            border-radius: 0; 
-            border: none;
-        }
-
-        .main-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-
-        .header {
-            height: 72px;
-            background-color: var(--card-bg);
-            padding: 0 32px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        .top-configs { display: flex; gap: 12px; align-items: center; }
-        .config-box { display: flex; align-items: center; gap: 8px; background-color: var(--bg); padding: 8px 16px; border-radius: 6px; border: 1px solid #e2e8f0; }
-        .config-input { border: none; background: transparent; font-size: 14px; font-weight: 600; outline: none; }
-        .game-select { border: none; background: transparent; font-size: 14px; font-weight: 600; color: var(--primary); outline: none; cursor: pointer; }
-
-        .btn-master {
-            background-color: var(--primary);
-            color: white; border: none; padding: 10px 20px; border-radius: 6px;
-            font-size: 14px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px;
-        }
-        .btn-share { background-color: #6366f1; }
-        .btn-pause { background-color: var(--warning); display: none; }
-
-        .content { flex: 1; padding: 24px; display: flex; gap: 20px; overflow: hidden; }
-
-        .instance-grid {
-            flex: 3; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 16px; overflow-y: auto; padding-right: 10px; align-content: start;
-        }
-
-        .instance-card { background: white; border-radius: 8px; padding: 15px; border: 1px solid #e2e8f0; border-left: 4px solid #cbd5e1; }
-        .instance-card.active { border-left-color: var(--success); background-color: #f0fdf4; }
-        .status-badge { font-size: 12px; font-weight: 600; color: #94a3b8; }
-
-        .terminal-wrapper {
-            flex: 1.5; background-color: #1e1e1e; border-radius: 8px;
-            display: flex; flex-direction: column; overflow: hidden; min-width: 400px;
-        }
-        .terminal-header { background-color: #2d2d2d; height: 30px; display: flex; align-items: center; justify-content: center; position: relative; }
-        .mac-dots { position: absolute; left: 12px; display: flex; gap: 6px; }
-        .dot { width: 10px; height: 10px; border-radius: 50%; }
-        .dot.r { background: #ff5f56; } .dot.y { background: #ffbd2e; } .dot.g { background: #27c93f; }
-        .terminal-title { color: #8e8e93; font-size: 12px; }
-
-        .terminal-body { padding: 15px; flex: 1; overflow-y: auto; color: #d4d4d4; font-family: monospace; font-size: 13px; line-height: 1.6; }
-        .log-entry { margin-bottom: 4px; }
-        .log-time { color: #6b7280; margin-right: 8px; }
-        .log-succ { color: #4ade80; } .log-sys { color: #c084fc; font-weight: bold; }
-
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+        :root { --bg: #0f172a; --text: #d4d4d4; }
+        body, html { margin: 0; padding: 0; height: 100vh; background: var(--bg); font-family: monospace; overflow: hidden; }
+        
+        /* 管理员看到的控制台布局 */
+        #admin-panel { display: flex; flex-direction: column; height: 100vh; color: white; }
+        .controls { padding: 20px; background: #1e293b; display: flex; gap: 10px; border-bottom: 1px solid #334155; }
+        .btn { padding: 8px 16px; border-radius: 4px; border: none; cursor: pointer; font-weight: bold; }
+        .btn-run { background: #10b981; color: white; }
+        .btn-share { background: #6366f1; color: white; }
+        
+        /* 核心终端窗口（对方只看这个） */
+        #terminal-container { flex: 1; display: flex; flex-direction: column; background: #1e1e1e; }
+        .terminal-header { background: #2d2d2d; height: 30px; display: flex; align-items: center; padding-left: 15px; color: #8e8e93; font-size: 12px; }
+        #terminal-body { flex: 1; padding: 15px; overflow-y: auto; line-height: 1.5; font-size: 14px; color: #4ade80; }
+        
+        /* 观众模式：隐藏所有按钮，只留终端 */
+        body.viewer #admin-panel .controls { display: none !important; }
+        body.viewer #terminal-container { height: 100vh; }
     </style>
 </head>
 <body>
 
-    <div class="main-wrapper">
-        <div class="header">
-            <div class="top-configs">
-                <div class="config-box"><span style="color:#64748b">账号:</span><input type="text" id="auth-account" class="config-input" value="Guest_998" style="width:100px"></div>
-                <div class="config-box"><span style="color:#64748b">业务:</span><select id="game-target" class="game-select"><option>无畏契约</option><option>穿越火线</option></select></div>
-                <div class="config-box"><span style="color:#64748b">配额:</span><input type="number" id="exec-count" class="config-input" value="100" style="width:50px"></div>
-            </div>
-            <div class="global-actions" style="display:flex; gap:10px;">
-                <button class="btn-master btn-share" id="share-btn" onclick="initRemoteShare()">🔗 开启分享</button>
-                <button class="btn-master" id="execute-btn" onclick="startDeployment()">⚡ 运行</button>
-                <button class="btn-master btn-pause" id="pause-btn" onclick="togglePause()">⏸ 暂停</button>
-            </div>
+    <div id="admin-panel">
+        <div class="controls">
+            <button class="btn btn-share" id="share-btn" onclick="startShare()">🔗 1. 点击开启分享</button>
+            <button class="btn btn-run" id="run-btn" onclick="runDemo()">⚡ 2. 点击运行(看效果)</button>
+            <span id="status-msg" style="margin-left:10px; font-size:13px; color:#94a3b8; align-self:center;"></span>
         </div>
 
-        <div class="content">
-            <div class="instance-grid" id="instance-container"></div>
-            <div class="terminal-wrapper">
-                <div class="terminal-header">
-                    <div class="mac-dots"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
-                    <span class="terminal-title">Remote Monitor - Realtime Output</span>
-                </div>
-                <div class="terminal-body" id="terminal-body">
-                    <div id="cursor-anchor"></div>
-                </div>
+        <div id="terminal-container">
+            <div class="terminal-header">● ● ● REMOTE_TERMINAL_OUTPUT</div>
+            <div id="terminal-body">
+                <div>[System] 等待指令中...</div>
             </div>
         </div>
     </div>
@@ -128,90 +45,68 @@
     <script>
         let peer = null;
         let connections = [];
-        let isRunning = false;
 
-        // --- 核心：自动识别身份 ---
-        window.onload = () => {
-            renderInstances();
-            const urlParams = new URLSearchParams(window.location.search);
-            const joinId = urlParams.get('join');
-            
-            if (joinId) {
-                // 进入接收者模式
-                document.body.classList.add('viewer-mode');
-                startViewer(joinId);
-            }
-        };
-
-        function startViewer(id) {
-            const viewerPeer = new Peer();
-            viewerPeer.on('open', () => {
-                const conn = viewerPeer.connect(id);
-                conn.on('data', (data) => {
-                    if (data.type === 'SYNC_FULL') document.getElementById('terminal-body').innerHTML = data.html;
-                    if (data.type === 'LOG') printSysLog(data.msg, data.logType, false);
-                });
-                conn.on('open', () => printSysLog("[系统] 连接成功，正在接收实时数据...", "succ"));
-            });
+        // 核心逻辑：如果是链接带了参数，就切换到“观众模式”
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('view')) {
+            document.body.classList.add('viewer');
+            initViewer(params.get('view'));
         }
 
-        function initRemoteShare() {
-            if (peer) {
-                prompt("复制链接给对方：", `${window.location.href.split('?')[0]}?join=${peer.id}`);
-                return;
-            }
+        // --- 你的操作（主机） ---
+        function startShare() {
             peer = new Peer();
             peer.on('open', (id) => {
-                document.getElementById('share-btn').innerText = `ID: ${id}`;
-                const shareUrl = `${window.location.href.split('?')[0]}?join=${id}`;
-                prompt("分享链接（对方打开后只能看到终端）：", shareUrl);
+                const shareLink = window.location.href.split('?')[0] + '?view=' + id;
+                document.getElementById('status-msg').innerText = "分享成功！";
+                // 弹窗让你复制链接
+                const tempInput = document.createElement("input");
+                document.body.appendChild(tempInput);
+                tempInput.value = shareLink;
+                tempInput.select();
+                document.execCommand("copy");
+                document.body.removeChild(tempInput);
+                alert("分享链接已自动复制到剪贴板，直接发给对方即可！\n链接中只包含终端，对方看不见按钮。");
             });
             peer.on('connection', (conn) => {
                 connections.push(conn);
-                conn.on('open', () => {
-                    conn.send({ type: 'SYNC_FULL', html: document.getElementById('terminal-body').innerHTML });
+                conn.send({ type: 'INIT', html: document.getElementById('terminal-body').innerHTML });
+            });
+        }
+
+        // --- 对方的操作（观众） ---
+        function initViewer(hostId) {
+            const viewer = new Peer();
+            viewer.on('open', () => {
+                const conn = viewer.connect(hostId);
+                conn.on('data', (data) => {
+                    if (data.type === 'INIT') document.getElementById('terminal-body').innerHTML = data.html;
+                    if (data.type === 'LOG') addLog(data.msg, false);
                 });
             });
         }
 
-        // --- 原有逻辑适配 ---
-        function printSysLog(message, type = 'gray', broadcast = true) {
-            const terminal = document.getElementById('terminal-body');
-            const entry = document.createElement('div');
-            entry.className = 'log-entry';
-            const now = new Date();
-            const timeStr = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
-            entry.innerHTML = `<span class="log-time">[${timeStr}]</span> <span class="log-${type}">${message}</span>`;
-            terminal.insertBefore(entry, document.getElementById('cursor-anchor'));
-            terminal.scrollTop = terminal.scrollHeight;
-            if (broadcast && connections.length > 0) {
-                connections.forEach(c => c.send({ type: 'LOG', msg: message, logType: type }));
+        // 通用打日志函数
+        function addLog(msg, isHost = true) {
+            const body = document.getElementById('terminal-body');
+            const div = document.createElement('div');
+            div.innerText = `> ${msg}`;
+            body.appendChild(div);
+            body.scrollTop = body.scrollHeight;
+            
+            // 如果你是主机，要把这一行发给所有人
+            if (isHost && connections.length > 0) {
+                connections.forEach(c => c.send({ type: 'LOG', msg: msg }));
             }
         }
 
-        const regions = [{c:"北京",d:"朝阳"},{c:"上海",d:"浦东"},{c:"广州",d:"天河"},{c:"深圳",d:"南山"}];
-        function renderInstances() {
-            const container = document.getElementById('instance-container');
-            for(let i=0; i<40; i++) {
-                const r = regions[i%4];
-                const card = document.createElement('div');
-                card.className = 'instance-card'; card.id = `card-${i}`;
-                card.innerHTML = `<b>${r.c}${r.d}</b><br><span class="status-badge" id="badge-${i}">IDLE</span>`;
-                container.appendChild(card);
+        // 模拟运行
+        async function runDemo() {
+            const steps = ["正在连接全球节点...", "安全验证通过...", "IP: 114.240.x.x 已挂载", "正在运行业务：无畏契约", "同步成功！"];
+            for(let s of steps) {
+                addLog(s);
+                await new Promise(r => setTimeout(r, 1000));
             }
-        }
-
-        async function startDeployment() {
-            if (isRunning) return;
-            isRunning = true;
-            printSysLog("开始执行自动化部署序列...", "sys");
-            for(let i=0; i<10; i++) {
-                await new Promise(r => setTimeout(r, 1500));
-                document.getElementById(`card-${i}`).classList.add('active');
-                document.getElementById(`badge-${i}`).innerText = "ONLINE";
-                printSysLog(`节点 ${i+1} 部署成功，业务已装载。`, "succ");
-            }
-            isRunning = false;
         }
     </script>
 </body>
