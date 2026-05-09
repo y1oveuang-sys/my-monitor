@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System - Remote Sharing</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-hover: #4338ca;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --dark: #0f172a;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #334155;
+            --text-light: #64748b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text-main);
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .main-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            height: 72px;
+            background-color: var(--card-bg);
+            padding: 0 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #e2e8f0;
+            z-index: 10;
+        }
+
+        .top-configs {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .config-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: var(--bg);
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .config-label {
+            color: #64748b;
+            font-size: 13px;
+        }
+
+        .config-input {
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--dark);
+            outline: none;
+            font-family: 'Consolas', monospace;
+        }
+
+        .game-select {
+            border: none;
+            background: transparent;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--primary);
+            outline: none;
+            cursor: pointer;
+            padding-right: 8px;
+        }
+
+        .global-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-master {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-master:hover {
+            background-color: var(--primary-hover);
+        }
+
+        /* 远程分享按钮样式 */
+        .btn-share {
+            background-color: #6366f1;
+            font-size: 13px;
+            padding: 10px 16px;
+        }
+
+        .btn-master:disabled {
+            background-color: #94a3b8;
+            box-shadow: none;
+            cursor: not-allowed;
+        }
+
+        .btn-pause {
+            background-color: var(--warning);
+            display: none; 
+        }
+        .btn-pause:hover {
+            background-color: #d97706;
+        }
+
+        .content {
+            flex: 1;
+            padding: 24px;
+            display: flex;
+            gap: 20px;
+            overflow: hidden;
+        }
+
+        .instance-grid {
+            flex: 4; 
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 16px;
+            overflow-y: auto;
+            padding-right: 12px;
+            align-content: start;
+            scroll-behavior: smooth;
+        }
+
+        .instance-card {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            padding: 16px 20px;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #cbd5e1;
+            transition: all 0.3s;
+        }
+
+        .instance-card.connecting {
+            border-left-color: var(--warning);
+            background-color: #fffbeb;
+            border-color: rgba(245, 158, 11, 0.3);
+        }
+
+        .instance-card.active {
+            border-left-color: var(--success);
+            background-color: #f0fdf4;
+            border-color: rgba(16, 185, 129, 0.2);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--dark);
+        }
+
+        .card-user {
+            font-size: 13px;
+            color: var(--text-light);
+            margin-bottom: 8px;
+        }
+
+        .card-id-ip {
+            font-family: 'Consolas', 'Courier New', monospace;
+            color: var(--text-light);
+            font-size: 12px;
+            background: #f1f5f9;
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .status-badge {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+        .status-connecting { color: #d97706; }
+        .status-active { color: #059669; }
+
+        .terminal-wrapper {
+            flex: 1; 
+            background-color: #1e1e1e;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+            border: 1px solid #333;
+            overflow: hidden;
+            min-width: 350px; 
+        }
+
+        .terminal-header {
+            background-color: #2d2d2d;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            border-bottom: 1px solid #111;
+        }
+
+        .mac-dots {
+            position: absolute;
+            left: 12px;
+            display: flex;
+            gap: 6px;
+        }
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .dot.r { background-color: #ff5f56; }
+        .dot.y { background-color: #ffbd2e; }
+        .dot.g { background-color: #27c93f; }
+
+        .terminal-title {
+            color: #8e8e93;
+            font-size: 12px;
+            font-family: -apple-system, sans-serif;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .terminal-body {
+            padding: 12px 16px;
+            flex: 1;
+            overflow-y: auto;
+            color: #d4d4d4; 
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace; 
+            font-size: 12px; 
+            line-height: 1.5;
+            word-break: break-all;
+        }
+
+        .log-entry { margin-bottom: 5px; }
+        .log-time { color: #6b7280; margin-right: 8px; }
+        .log-info { color: #38bdf8; }
+        .log-warn { color: #facc15; }
+        .log-succ { color: #4ade80; }
+        .log-sys  { color: #c084fc; font-weight: bold; }
+        .log-gray { color: #9ca3af; }
+
+        .cursor-blink {
+            display: inline-block;
+            width: 7px;
+            height: 13px;
+            background-color: #9ca3af;
+            vertical-align: middle;
+            margin-left: 4px;
+            animation: blink 1s step-end infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .terminal-body::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
+    </style>
+</head>
+<body>
+
+    <div class="main-wrapper">
+        <div class="header">
+            <div class="top-configs">
+                <div class="config-box">
+                    <span class="config-label">登录账号:</span>
+                    <input type="text" class="config-input" id="auth-account" value="Guest_User_998" style="width: 130px;">
+                </div>
+                <div class="config-box">
+                    <span class="config-label">运行业务:</span>
+                    <select id="game-target" class="game-select">
+                        <option value="无畏契约">无畏契约</option>
+                        <option value="穿越火线">穿越火线</option>
+                        <option value="三角洲行动">三角洲行动</option>
+                    </select>
+                </div>
+                <div class="config-box">
+                    <span class="config-label">任务队列配额:</span>
+                    <input type="number" class="config-input" id="exec-count" value="200" min="1" max="200" style="width: 50px;">
+                </div>
+            </div>
+            <div class="global-actions">
+                <button class="btn-master btn-share" id="share-btn" onclick="initRemoteShare()">
+                    🔗 远程分享
+                </button>
+                <button class="btn-master" id="execute-btn" onclick="startDeployment()">
+                    ⚡ 一键运行
+                </button>
+                <button class="btn-master btn-pause" id="pause-btn" onclick="togglePause()">
+                    ⏸ 暂停任务
+                </button>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="instance-grid" id="instance-container"></div>
+
+            <div class="terminal-wrapper">
+                <div class="terminal-header">
+                    <div class="mac-dots">
+                        <div class="dot r"></div>
+                        <div class="dot y"></div>
+                        <div class="dot g"></div>
+                    </div>
+                    <span class="terminal-title">
+                        root@system-core: ~
+                    </span>
+                </div>
+                <div class="terminal-body" id="terminal-body">
+                    <div class="log-entry">
+                        <span class="log-gray">Last login: <span id="init-time"></span> on ttys001</span>
+                    </div>
+                    <div id="cursor-anchor"><span class="cursor-blink"></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 远程分享核心逻辑 ---
+        let peer = null;
+        let connections = [];
+
+        function initRemoteShare() {
+            const shareBtn = document.getElementById('share-btn');
+            if (peer) {
+                const code = peer.id;
+                const shareUrl = `${window.location.origin}${window.location.pathname}?join=${code}`;
+                prompt("已开启分享！请复制下方代码发给对方。对方打开网页后输入此代码，或直接访问带参数的链接：", shareUrl);
+                return;
+            }
+
+            // 初始化 Peer
+            peer = new Peer();
+            
+            peer.on('open', (id) => {
+                shareBtn.innerHTML = `✅ ID: ${id}`;
+                shareBtn.style.backgroundColor = 'var(--success)';
+                const shareUrl = `${window.location.origin}${window.location.pathname}?join=${id}`;
+                console.log("分享链接:", shareUrl);
+                alert("分享已就绪！房间号: " + id + "\n\n对方打开网页后输入此号即可同步。");
+            });
+
+            peer.on('connection', (conn) => {
+                connections.push(conn);
+                printSysLog(`[分享系统] 新设备已连接: ${conn.peer}`, 'succ');
+                // 连接时同步当前所有历史日志
+                conn.on('open', () => {
+                    const logs = document.getElementById('terminal-body').innerHTML;
+                    conn.send({ type: 'SYNC_FULL', html: logs });
+                });
+            });
+        }
+
+        // 自动加入逻辑 (如果是 Viewer)
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const joinId = urlParams.get('join');
+            
+            if (joinId) {
+                const viewerPeer = new Peer();
+                document.getElementById('share-btn').innerText = "📡 正在同步...";
+                document.getElementById('execute-btn').disabled = true;
+                document.getElementById('execute-btn').innerText = "只读模式";
+
+                viewerPeer.on('open', () => {
+                    const conn = viewerPeer.connect(joinId);
+                    conn.on('data', (data) => {
+                        if (data.type === 'SYNC_FULL') {
+                            document.getElementById('terminal-body').innerHTML = data.html;
+                        } else if (data.type === 'LOG') {
+                            printSysLog(data.msg, data.logType, false); // 不再二次广播
+                        }
+                    });
+                    conn.on('open', () => {
+                        document.getElementById('share-btn').innerText = "🟢 已同步";
+                        printSysLog("[系统] 成功连接至远程主机，正在接收实时数据...", "succ");
+                    });
+                });
+            }
+        });
+
+        // --- 原有逻辑适配 ---
+
+        let isPaused = false;
+        let isRunning = false;
+
+        document.getElementById('init-time').innerText = new Date().toString().split(' GMT')[0];
+
+        const coreRegionList = [
+            { city: "北京市", district: "朝阳区" }, { city: "上海市", district: "浦东新区" },
+            { city: "广东省", district: "广州市天河区" }, { city: "广东省", district: "深圳市南山区" },
+            { city: "四川省", district: "成都市武侯区" }, { city: "浙江省", district: "杭州市西湖区" },
+            { city: "湖北省", district: "武汉市洪山区" }, { city: "陕西省", district: "西安市雁塔区" },
+            { city: "江苏省", district: "南京市鼓楼区" }, { city: "天津市", district: "南开区" }
+        ];
+
+        const ordinaryRegionList = [
+            { city: "重庆市", district: "九龙坡区" }, { city: "东莞市", district: "莞城区" }, { city: "佛山市", district: "禅城区" }, { city: "珠海市", district: "香洲区" }, { city: "汕头市", district: "金平区" }, { city: "中山市", district: "石岐区" }, { city: "江门市", district: "蓬江区" }, { city: "湛江市", district: "赤坎区" }, { city: "绵阳市", district: "涪城区" }, { city: "南充市", district: "顺庆区" }, { city: "宜宾市", district: "翠屏区" }, { city: "宁波市", district: "海曙区" }, { city: "温州市", district: "鹿城区" }, { city: "嘉兴市", district: "南湖区" }, { city: "金华市", district: "婺城区" }, { city: "绍兴市", district: "越城区" }, { city: "台州市", district: "椒江区" }, { city: "湖州市", district: "吴兴区" }, { city: "苏州市", district: "姑苏区" }, { city: "无锡市", district: "梁溪区" }, { city: "常州市", district: "天宁区" }, { city: "南通市", district: "崇川区" }, { city: "徐州市", district: "泉山区" }, { city: "盐城市", district: "亭湖区" }, { city: "泰州市", district: "海陵区" }, { city: "镇江市", district: "京口区" }, { city: "扬州市", district: "广陵区" }, { city: "宜昌市", district: "西陵区" }, { city: "襄阳市", district: "樊城区" }, { city: "咸阳市", district: "秦都区" }, { city: "宝鸡市", district: "渭滨区" }, { city: "济南市", district: "历下区" }, { city: "青岛市", district: "市南区" }, { city: "烟台市", district: "芝罘区" }, { city: "潍坊市", district: "潍城区" }, { city: "临沂市", district: "兰山区" }, { city: "淄博市", district: "张店区" }, { city: "威海市", district: "环翠区" }, { city: "福州市", district: "鼓楼区" }, { city: "厦门市", district: "思明区" }, { city: "泉州市", district: "丰泽区" }, { city: "宁德市", district: "蕉城区" }, { city: "漳州市", district: "芗城区" }, { city: "长沙市", district: "岳麓区" }, { city: "株洲市", district: "芦淞区" }, { city: "岳阳市", district: "岳阳楼区" }, { city: "衡阳市", district: "雁峰区" }, { city: "湘潭市", district: "雨湖区" }, { city: "郑州市", district: "金水区" }, { city: "洛阳市", district: "涧西区" }, { city: "新乡市", district: "红旗区" }, { city: "南阳市", district: "卧龙区" }, { city: "石家庄市", district: "长安区" }, { city: "保定市", district: "莲池区" }, { city: "唐山市", district: "路北区" }, { city: "廊坊市", district: "广阳区" }, { city: "沧州市", district: "运河区" }, { city: "沈阳市", district: "沈河区" }, { city: "大连市", district: "中山区" }, { city: "鞍山市", district: "铁东区" }, { city: "合肥市", district: "蜀山区" }, { city: "芜湖市", district: "镜湖区" }, { city: "南昌市", district: "东湖区" }, { city: "九江市", district: "浔阳区" }, { city: "赣州市", district: "章贡区" }, { city: "南宁市", district: "青秀区" }, { city: "柳州市", district: "城中区" }, { city: "桂林市", district: "秀峰区" }, { city: "昆明市", district: "五华区" }, { city: "贵阳市", district: "南明区" }, { city: "太原市", district: "迎泽区" }, { city: "海口市", district: "美兰区" }, { city: "三亚市", district: "吉阳区" }, { city: "长春市", district: "朝阳区" }, { city: "吉林市", district: "船营区" }, { city: "哈尔滨市", district: "南岗区" }, { city: "大庆市", district: "萨尔图区" }, { city: "呼和浩特市", district: "新城区" }, { city: "包头市", district: "昆都仑区" }, { city: "兰州市", district: "城关区" }, { city: "银川市", district: "兴庆区" }, { city: "西宁市", district: "城中区" }, { city: "乌鲁木齐市", district: "天山区" }, { city: "大理州", district: "大理市" }, { city: "克拉玛依市", district: "独山子区" }, { city: "呼伦贝尔市", district: "海拉尔区" }, { city: "晋中市", district: "榆次区" }, { city: "延安市", district: "宝塔区" }, { city: "遵义市", district: "汇川区" }, { city: "曲靖市", district: "麒麟区" }, { city: "许昌市", district: "魏都区" }, { city: "焦作市", district: "解放区" }, { city: "齐齐哈尔市", district: "龙沙区" }, { city: "牡丹江市", district: "西安区" }, { city: "松原市", district: "宁江区" }, { city: "通辽市", district: "科尔沁区" }, { city: "赤峰市", district: "红山区" }, { city: "咸宁市", district: "咸安区" }, { city: "黄石市", district: "下陆区" }, { city: "株洲市", district: "天元区" }, { city: "张家界市", district: "永定区" }, { city: "郴州市", district: "北湖区" }, { city: "河源市", district: "源城区" }, { city: "清远市", district: "清城区" }, { city: "阳江市", district: "江城区" }, { city: "潮州市", district: "湘桥区" }, { city: "梅州市", district: "梅江区" }, { city: "自贡市", district: "大安区" }, { city: "攀枝花市", district: "东区" }, { city: "泸州市", district: "江阳区" }, { city: "德阳市", district: "旌阳区" }, { city: "广元市", district: "利州区" }, { city: "遂宁市", district: "船山区" }, { city: "内江市", district: "市中区" }, { city: "乐山市", district: "市中区" }, { city: "巴中市", district: "巴州区" }, { city: "雅安市", district: "雨城区" }, { city: "资阳市", district: "雁江区" }, { city: "拉萨市", district: "城关区" }, { city: "日喀则市", district: "桑珠孜区" }, { city: "林芝市", district: "巴宜区" }, { city: "延吉市", district: "延吉市" }, { city: "开封市", district: "龙亭区" }, { city: "平顶山市", district: "卫东区" }, { city: "安阳市", district: "文峰区" }, { city: "鹤壁市", district: "淇滨区" }, { city: "漯河市", district: "召陵区" }, { city: "濮阳市", district: "华龙区" }, { city: "三门峡市", district: "湖滨区" }, { city: "商丘市", district: "梁园区" }, { city: "周口市", district: "川汇区" }, { city: "驻马店市", district: "驿城区" }, { city: "信阳市", district: "河区" }, { city: "南平市", district: "延平区" }, { city: "三明市", district: "梅列区" }, { city: "莆田市", district: "城厢区" }, { city: "龙岩市", district: "新罗区" }, { city: "抚州市", district: "临川区" }, { city: "宜春市", district: "袁州区" }, { city: "吉安市", district: "青原区" }, { city: "上饶市", district: "信州区" }, { city: "萍乡市", district: "安源区" }, { city: "景德镇市", district: "珠山区" }, { city: "新余市", district: "渝水区" }, { city: "鹰潭市", district: "月湖区" }, { city: "马鞍山市", district: "花山区" }, { city: "淮北市", district: "相山区" }, { city: "淮南市", district: "田家庵区" }, { city: "铜陵市", district: "铜官区" }, { city: "安庆市", district: "宜秀区" }, { city: "黄山市", district: "屯溪区" }, { city: "滁州市", district: "琅琊区" }, { city: "阜阳市", district: "颍州州区" }, { city: "宿州市", district: "埇桥区" }, { city: "六安市", district: "金安区" }, { city: "亳州市", district: "谯城区" }, { city: "池州市", district: "贵池区" }, { city: "宣城市", district: "宣州区" }, { city: "曲阳县", district: "曲阳" }, { city: "迁安市", district: "迁安" }
+        ];
+
+        const getRealisticIP = (cityName) => {
+            const ipMap = {
+                "北京": ["114.240", "114.242", "220.181", "106.37"],
+                "上海": ["101.226", "101.230", "116.228", "114.80"],
+                "广州": ["14.116", "113.65", "119.129", "121.33"],
+                "深圳": ["14.18", "113.89", "119.136", "121.35"],
+                "成都": ["125.69", "118.113", "171.220", "218.89"],
+                "杭州": ["115.238", "122.225", "60.190", "183.136"]
+            };
+            const defaultPrefixes = ["27.16", "36.96", "49.64", "58.14", "112.10", "117.10", "118.10", "121.10", "220.10"];
+            let cleanCity = cityName.replace(/[省市]/g, "");
+            const prefix = (ipMap[cleanCity] || defaultPrefixes)[Math.floor(Math.random() * (ipMap[cleanCity] || defaultPrefixes).length)];
+            return `${prefix}.${Math.floor(Math.random()*256)}.${Math.floor(Math.random()*254)+1}`;
+        };
+
+        const generateWindowsUser = (index) => {
+            const pattern = [`PC-USER-${Math.floor(Math.random()*800+100)}`, `Administrator`, `DESKTOP-${Math.random().toString(36).substring(2,9).toUpperCase()}`, `USER-STATION-${String(index + 1).padStart(3, '0')}`, `WORK-PC-${Math.floor(Math.random() * 900 + 100)}` ];
+            return pattern[index % pattern.length];
+        };
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; }
+            return array;
+        }
+
+        const ordinaryShuffled = shuffleArray([...ordinaryRegionList]);
+        const finalMergedRegions = [...coreRegionList, ...ordinaryShuffled].slice(0, 200);
+
+        const instances = finalMergedRegions.map((reg, index) => {
+            return { id: `Node-${String(index + 1).padStart(3, '0')}`, region: `${reg.city}${reg.district}`, computerUser: generateWindowsUser(index), ip: getRealisticIP(reg.city) };
+        });
+
+        function renderInstances() {
+            const container = document.getElementById('instance-container');
+            container.innerHTML = '';
+            instances.forEach((inst, index) => {
+                const card = document.createElement('div');
+                card.className = 'instance-card'; card.id = `card-${index}`;
+                card.innerHTML = `<div class="card-header"><div class="card-title">${inst.region}</div><div class="status-badge" id="badge-${index}">IDLE</div></div><div class="card-user">电脑用户名: ${inst.computerUser}</div><div class="card-id-ip">IP: ${inst.ip}</div>`;
+                container.appendChild(card);
+            });
+        }
+
+        function getStrictRealTime() {
+            const now = new Date();
+            return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.${String(now.getMilliseconds()).padStart(3, '0')}`;
+        }
+
+        // 修改后的日志打印逻辑：增加广播功能
+        function printSysLog(message, type = 'gray', shouldBroadcast = true) {
+            const terminal = document.getElementById('terminal-body');
+            const anchor = document.getElementById('cursor-anchor');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${getStrictRealTime()}]</span> <span class="log-${type}">${message}</span>`;
+            terminal.insertBefore(entry, anchor);
+            terminal.scrollTop = terminal.scrollHeight;
+
+            // 远程同步广播
+            if (shouldBroadcast && connections.length > 0) {
+                connections.forEach(conn => {
+                    conn.send({ type: 'LOG', msg: message, logType: type });
+                });
+            }
+        }
+
+        function generateRandomToken() { return 'TK_' + Math.random().toString(36).substring(2, 12).toUpperCase(); }
+
+        function generateGamePath(gameName, driveLetter) {
+            const bases = ['Program Files', 'TencentGames', 'WeGameApps', 'Games'];
+            let exePath = gameName.includes('无畏契约') ? 'Riot Games\\VALORANT\\live\\VALORANT.exe' : (gameName.includes('穿越火线') ? '穿越火线\\crossfire.exe' : 'DeltaForce\\DeltaForce.exe');
+            return `${driveLetter}:\\${bases[Math.floor(Math.random()*bases.length)]}\\${exePath}`;
+        }
+
+        async function smartSleep(ms) {
+            let elapsed = 0;
+            while (elapsed < ms) { 
+                while (isPaused) { await new Promise(r => setTimeout(r, 200)); } 
+                await new Promise(r => setTimeout(r, 100)); 
+                elapsed += 100; 
+            }
+        }
+
+        function togglePause() {
+            if (!isRunning) return;
+            isPaused = !isPaused;
+            const pauseBtn = document.getElementById('pause-btn');
+            if (isPaused) { 
+                pauseBtn.innerHTML = '▶ 继续任务'; 
+                pauseBtn.style.backgroundColor = '#10b981'; 
+                printSysLog(`[系统指令] 队列挂起：任务已被手动暂停...`, 'warn'); 
+            } else { 
+                pauseBtn.innerHTML = '⏸ 暂停任务'; 
+                pauseBtn.style.backgroundColor = '#f59e0b'; 
+                printSysLog(`[系统指令] 队列恢复：任务继续执行...`, 'succ'); 
+            }
+        }
+
+        async function startDeployment() {
+            if (isRunning) return;
+            isRunning = true;
+
+            const btn = document.getElementById('execute-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+            const targetGame = document.getElementById('game-target').value;
+            const accountName = document.getElementById('auth-account').value || "Default_User";
+            let reqCount = parseInt(document.getElementById('exec-count').value);
+            
+            if (isNaN(reqCount) || reqCount < 1) reqCount = 1;
+            if (reqCount > instances.length) reqCount = instances.length;
+
+            btn.disabled = true;
+            btn.innerHTML = `执行中...`;
+            pauseBtn.style.display = 'flex'; 
+
+            document.getElementById('exec-count').disabled = true;
+            document.getElementById('game-target').disabled = true;
+            document.getElementById('auth-account').disabled = true;
+            
+            printSysLog(`root@system:~# ./run_task.sh --app "${targetGame}" --account "${accountName}" --quota ${reqCount}`, 'gray');
+            await smartSleep(500);
+            printSysLog('==============================================', 'gray');
+            printSysLog(`[系统] 任务启动：开始执行自动化部署序列...`, 'sys');
+            await smartSleep(800);
+
+            let sessionSuccessCount = 0;
+
+            for (let i = 0; i < reqCount; i++) {
+                const inst = instances[i];
+                const card = document.getElementById(`card-${i}`);
+                const badge = document.getElementById(`badge-${i}`);
+
+                card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                card.className = 'instance-card connecting';
+                badge.className = 'status-badge status-connecting';
+                badge.innerText = 'PROCESSING...';
+
+                const totalMs = Math.floor(Math.random() * (60000 - 20000 + 1)) + 20000;
+
+                printSysLog(`[网络] 正在连接目标地域节点 -> ${inst.ip} (${inst.region})`, 'gray');
+                await smartSleep(totalMs * 0.15); 
+
+                printSysLog(`[安全检测] 驱动级授权初始化：正在分析并应用防火墙放行策略...`, 'gray');
+                await smartSleep(totalMs * 0.25);
+                printSysLog(`[安全检测] 底层授权完成：已通过 Huorong Sec (火绒) 拦截与 ACE (Anti-Cheat Expert) 运行态验证。`, 'warn');
+                await smartSleep(totalMs * 0.10);
+
+                printSysLog(`[系统鉴权] 成功连接服务器，准备验证业务凭证 [${accountName}]...`, 'gray');
+                await smartSleep(totalMs * 0.10);
+                printSysLog(`[会话中心] 动态鉴权 Token 已安全轮换更新 (Token: ${generateRandomToken()})`, 'sys');
+                await smartSleep(totalMs * 0.10);
+
+                const targetDrive = ['C', 'D', 'E'][Math.floor(Math.random() * 3)];
+                printSysLog(`[进程定位] 正在对本地物理磁盘 [${targetDrive}:] 扇区执行扫描，定位应用路径...`, 'gray');
+                await smartSleep(totalMs * 0.10);
+                printSysLog(`[进程定位] 寻址完成：路径 -> ${generateGamePath(targetGame, targetDrive)}`, 'info');
+                await smartSleep(totalMs * 0.05);
+
+                printSysLog(`[业务装载] 数据包下发完成，正在等待 <${targetGame}> 服务器响应...`, 'gray');
+                await smartSleep(totalMs * 0.15);
+                printSysLog(`[业务装载] 进程拉起完毕，已通过该节点成功登录 <${targetGame}>。`, 'succ');
+
+                card.className = 'instance-card active';
+                badge.className = 'status-badge status-active';
+                badge.innerText = 'ONLINE';
+                
+                sessionSuccessCount++;
+                printSysLog(`[统计中心] 本次部署作业累计成功运行次数: ${sessionSuccessCount} 次`, 'sys');
+                
+                if (i < reqCount - 1) {
+                    await smartSleep(1500); 
+                    printSysLog('----------------------------------------------', 'gray');
+                }
+            }
+
+            printSysLog('==============================================', 'gray');
+            printSysLog(`[系统] 调度任务结束。当前会话累计总完成次数: ${sessionSuccessCount} 次。`, 'sys');
+            
+            btn.innerHTML = '执行完毕';
+            btn.style.backgroundColor = '#10b981';
+            pauseBtn.style.display = 'none'; 
+            isRunning = false;
+        }
+
+        window.onload = renderInstances;
+    </script>
+</body>
+</html>
